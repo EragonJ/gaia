@@ -45,6 +45,37 @@ Base.prototype = {
    */
   waitForElement: function(name) {
     return this.client.helper.waitForElement(this.selectors[name]);
-  }
+  },
 
+  registerTransitionEnd: function(sel) {
+    this.client.executeScript(function(sel) {
+      var ele = window.wrappedJSObject.document.querySelector(sel);
+      ele.dataset.transitionStatus = '';
+      ele.addEventListener('transitionend', function onTransitionEnd() {
+        ele.removeEventListener('transitionend', onTransitionEnd);
+        ele.dataset.transitionStatus = 'end';
+      });
+    }, [sel]);
+  },
+
+  waitForTransitionEnd: function(sel) {
+    this.client.waitFor(function() {
+      var transitionStatus = this.client.executeScript(function(sel) {
+        var ele = window.wrappedJSObject.document.querySelector(sel);
+        var transitionStatus = ele.dataset.transitionStatus;
+
+        if (transitionStatus === 'end') {
+          ele.dataset.transitionStatus = '';
+        }
+
+        return transitionStatus;
+      }, [sel]);
+      return (transitionStatus === 'end');
+    }.bind(this));
+  },
+
+  waitForPanelReady: function app_waitForPanelReady(sel) {
+    this.registerTransitionEnd(sel);
+    this.waitForTransitionEnd(sel);
+  }
 };
