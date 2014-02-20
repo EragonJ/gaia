@@ -1,9 +1,11 @@
 'use strict';
 
+var utils = require('./utils.js');
 var path = require('path');
 var sh = require('child_process').exec;
 var fs = require('fs');
 var AdmZip = require('adm-zip');
+var Q = require('q');
 
 function joinPath() {
   var src = path.join.apply(this, arguments);
@@ -35,17 +37,18 @@ function getFile() {
   };
 }
 
-function getFileContent(file) {
+function getFileContent(file, type) {
   if (file.exists() && file.isFile()){
-    return fs.readFileSync(file.path, {encoding: 'utf-8'});
+    return fs.readFileSync(file.path, {encoding: type || 'utf-8'});
   }
 }
 
 function Commander(cmd) {
 
-  this.initPath = function(){};
+  this.initPath = function(p) {};
 
-  this.run = function(args) {
+  this.run = function(args, callback) {
+    var q = Q.defer();
     var cmds = args.join(' ');
 
     // In *nix and OSX version commands are run via sh -c YOUR_COMMAND,
@@ -60,7 +63,13 @@ function Commander(cmd) {
     // XXX: Most cmds should run synchronously, we should use either promise
     //      pattern inside each script or find a sync module which doesn't
     //      require recompile again since TPBL doesn't support that.
-    sh(cmds);
+    sh(cmds, function(err, stdout, stderr) {
+      if (err === null && typeof callback === 'function') {
+        callback(stdout);
+      }
+      q.resolve();
+    });
+    return q.promise;
   };
 }
 
@@ -70,12 +79,43 @@ function readZipManifest(file) {
   var content = {};
   for (var i = 0; i < zipEntries.length; i++) {
     var zipEntry = zipEntries[i];
-    if (zipEntry.entryName == "manifest.webapp") {
+    if (zipEntry.entryName == 'manifest.webapp') {
       content = JSON.parse(zipEntry.getData().toString('utf8'));
       break;
     }
   }
   return content;
+}
+
+function killAppByPid(appName) {
+  sh('adb shell b2g-ps', function(err, stdout, stderr) {
+    if (!err && stdout) {
+      var psMap = utils.psParser(stdout);
+      if (psMap[appName] && psMap[appName].PID) {
+        sh('adb shell kill ' + psMap[appName].PID);
+      }
+    }
+  });
+}
+
+function resolve(path, gaiaDir) {
+  return getFile(gaiaDir, path);
+}
+
+function getFileAsDataURI(file) {
+  var data = getFileContent(file, 'base64');
+  return new Buffer(data, 'binary').toString('base64');
+}
+
+function getJSON(file) {
+  var data = getFileContent(file, 'utf-8');
+  return JSON.parse(data);
+}
+
+function processEvents() {}
+
+function writeContent(file, content) {
+  fs.writeFileSync(file.path, content);
 }
 
 exports.joinPath = joinPath;
@@ -85,3 +125,10 @@ exports.Commander = Commander;
 exports.getEnvPath = function() {};
 exports.readZipManifest = readZipManifest;
 exports.log = console.log;
+exports.killAppByPid = killAppByPid;
+exports.resolve = resolve;
+exports.getFileAsDataURI = getFileAsDataURI;
+exports.getJSON = getJSON;
+exports.processEvents = processEvents;
+exports.writeContent = writeContent;
+exports.Q = Q;

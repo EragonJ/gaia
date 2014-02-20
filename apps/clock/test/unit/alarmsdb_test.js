@@ -1,10 +1,11 @@
+'use strict';
+/* jshint loopfunc:true */
 suite('AlarmsDB Test Suite', function() {
 
   this.slow(2000);
-  this.timeout(5000);
 
   var alarmPrefix = 'alarmsdb_test';
-  var Alarm, AlarmsDB, Utils, rawQuery;
+  var AlarmsDB, Utils, rawQuery;
 
   suiteSetup(function(done) {
     testRequire([

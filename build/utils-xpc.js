@@ -1,12 +1,14 @@
-const { Cc, Ci, Cr, Cu } = require('chrome');
-const { btoa } = Cu.import("resource://gre/modules/Services.jsm", {});
+const { Cc, Ci, Cr, Cu, CC } = require('chrome');
+const { btoa } = Cu.import('resource://gre/modules/Services.jsm', {});
 const multilocale = require('./multilocale');
 
 Cu.import('resource://gre/modules/XPCOMUtils.jsm');
 Cu.import('resource://gre/modules/FileUtils.jsm');
 Cu.import('resource://gre/modules/Services.jsm');
 Cu.import('resource://gre/modules/osfile.jsm');
+Cu.import('resource://gre/modules/Promise.jsm');
 
+var utils = require('./utils.js');
 /**
  * Returns an array of nsIFile's for a given directory
  *
@@ -36,8 +38,17 @@ function ls(dir, recursive, exclude) {
 }
 
 function getOsType() {
-  return Cc["@mozilla.org/xre/app-info;1"]
+  return Cc['@mozilla.org/xre/app-info;1']
           .getService(Ci.nsIXULRuntime).OS;
+}
+
+function isExternalApp(webapp) {
+  if (!webapp.metaData ||
+    (webapp.metaData && webapp.metaData.external === false)) {
+    return false
+  } else {
+    return true;
+  }
 }
 
 function getFileContent(file) {
@@ -66,6 +77,7 @@ function getFileContent(file) {
   return content;
 }
 
+// Write content to file, if the file doesn't exist, the it will auto create one
 function writeContent(file, content) {
   var fileStream = Cc['@mozilla.org/network/file-output-stream;1']
                      .createInstance(Ci.nsIFileOutputStream);
@@ -125,28 +137,29 @@ function getJSON(file) {
 }
 
 function getFileAsDataURI(file) {
-  var contentType = Cc["@mozilla.org/mime;1"]
+  var contentType = Cc['@mozilla.org/mime;1']
                     .getService(Ci.nsIMIMEService)
                     .getTypeFromFile(file);
-  var inputStream = Cc["@mozilla.org/network/file-input-stream;1"]
+  var inputStream = Cc['@mozilla.org/network/file-input-stream;1']
                     .createInstance(Ci.nsIFileInputStream);
   inputStream.init(file, 0x01, 0600, 0);
-  var stream = Cc["@mozilla.org/binaryinputstream;1"]
+  var stream = Cc['@mozilla.org/binaryinputstream;1']
                .createInstance(Ci.nsIBinaryInputStream);
   stream.setInputStream(inputStream);
   var encoded = btoa(stream.readBytes(stream.available()));
-  return "data:" + contentType + ";base64," + encoded;
+  return 'data:' + contentType + ';base64,' + encoded;
 }
 
 function readZipManifest(appDir) {
   let zipFile = appDir.clone();
-  zipFile.append("application.zip");
+  zipFile.append('application.zip');
 
   if (!zipFile.exists()) {
     return null;
   }
 
-  var zipReader = Cc["@mozilla.org/libjar/zip-reader;1"].createInstance(Ci.nsIZipReader);
+  var zipReader =
+    Cc['@mozilla.org/libjar/zip-reader;1'].createInstance(Ci.nsIZipReader);
   zipReader.open(zipFile);
   zipReader.test(null);
   if (zipReader.hasEntry('manifest.webapp')) {
@@ -172,73 +185,84 @@ function readZipManifest(appDir) {
                   ' app (' + appDir.leafName + ')\n');
 }
 
-function makeWebappsObject(appdirs, domain, scheme, port) {
-  return {
-    forEach: function(fun) {
-      appdirs.forEach(function(app) {
-        let appDir = getFile(app);
-        if (!appDir.exists()) {
-          throw new Error(' -*- build/utils.js: file not found (' +
-            app + ')\n');
-        }
+function getWebapp(app, domain, scheme, port) {
+  let appDir = getFile(app);
+  if (!appDir.exists()) {
+    throw new Error(' -*- build/utils.js: file not found (' +
+      app + ')\n');
+  }
 
-        let manifestFile = appDir.clone();
-        manifestFile.append('manifest.webapp');
+  let manifestFile = appDir.clone();
+  manifestFile.append('manifest.webapp');
 
-        let updateFile = appDir.clone();
-        updateFile.append('update.webapp');
+  let updateFile = appDir.clone();
+  updateFile.append('update.webapp');
 
-        // Ignore directories without manifest
-        if (!manifestFile.exists() && !updateFile.exists()) {
-          return;
-        }
+  // Ignore directories without manifest
+  if (!manifestFile.exists() && !updateFile.exists()) {
+    return;
+  }
 
-        let manifest = manifestFile.exists() ? manifestFile : updateFile;
+  let manifest = manifestFile.exists() ? manifestFile : updateFile;
 
-        // Use the folder name as the the domain name
-        let appDomain = appDir.leafName + '.' + domain;
-        let webapp = {
-          manifest: getJSON(manifest),
-          manifestFile: manifest,
-          url: scheme + appDomain + (port ? port : ''),
-          domain: appDomain,
-          sourceDirectoryFile: manifestFile.parent,
-          buildDirectoryFile: manifestFile.parent,
-          sourceDirectoryName: appDir.leafName,
-          sourceAppDirectoryName: appDir.parent.leafName
-        };
-
-        // External webapps have a `metadata.json` file
-        let metaData = webapp.sourceDirectoryFile.clone();
-        metaData.append('metadata.json');
-        if (metaData.exists()) {
-          webapp.pckManifest = readZipManifest(webapp.sourceDirectoryFile);
-          webapp.metaData = getJSON(metaData);
-        }
-
-        // Some webapps control their own build
-        let buildMetaData = webapp.sourceDirectoryFile.clone();
-        buildMetaData.append('gaia_build.json');
-        if (buildMetaData.exists()) {
-          webapp.build = getJSON(buildMetaData);
-
-          if (webapp.build.dir) {
-            let buildDirectoryFile = webapp.sourceDirectoryFile.clone();
-            webapp.build.dir.split('/').forEach(function(segment) {
-              if (segment == '..')
-                buildDirectoryFile = buildDirectoryFile.parent;
-              else
-                buildDirectoryFile.append(segment);
-            });
-
-            webapp.buildDirectoryFile = buildDirectoryFile;
-          }
-        }
-
-        fun(webapp);
-      });
-    }
+  // Use the folder name as the the domain name
+  let appDomain = appDir.leafName + '.' + domain;
+  let webapp = {
+    manifest: getJSON(manifest),
+    manifestFile: manifest,
+    buildManifestFile: manifest,
+    url: scheme + appDomain + (port ? port : ''),
+    domain: appDomain,
+    sourceDirectoryFile: manifestFile.parent,
+    buildDirectoryFile: manifestFile.parent,
+    sourceDirectoryName: appDir.leafName,
+    sourceAppDirectoryName: appDir.parent.leafName
   };
+
+  // External webapps have a `metadata.json` file
+  let metaData = webapp.sourceDirectoryFile.clone();
+  metaData.append('metadata.json');
+  if (metaData.exists()) {
+    webapp.pckManifest = readZipManifest(webapp.sourceDirectoryFile);
+    webapp.metaData = getJSON(metaData);
+  }
+
+  // Some webapps control their own build
+  let buildMetaData = webapp.sourceDirectoryFile.clone();
+  buildMetaData.append('gaia_build.json');
+  if (buildMetaData.exists()) {
+    webapp.build = getJSON(buildMetaData);
+
+    if (webapp.build.dir) {
+      let buildDirectoryFile = webapp.sourceDirectoryFile.clone();
+      webapp.build.dir.split('/').forEach(function(segment) {
+        if (segment == '..')
+          buildDirectoryFile = buildDirectoryFile.parent;
+        else
+          buildDirectoryFile.append(segment);
+      });
+
+      webapp.buildDirectoryFile = buildDirectoryFile;
+
+      let buildManifestFile = buildDirectoryFile.clone();
+      buildManifestFile.append('manifest.webapp');
+
+      webapp.buildManifestFile = buildManifestFile;
+    }
+  }
+
+  return webapp;
+}
+
+function makeWebappsObject(appdirs, domain, scheme, port) {
+  var apps = [];
+  appdirs.forEach(function(app) {
+    var webapp = getWebapp(app, domain, scheme, port);
+    if (webapp) {
+      apps.push(webapp);
+    }
+  });
+  return apps;
 }
 
 function registerProfileDirectory(profileDir) {
@@ -293,14 +317,6 @@ function getGaia(options) {
 function getLocaleBasedir(original) {
   return (getOsType().indexOf('WIN') !== -1) ?
     original.replace('/', '\\', 'g') : original;
-}
-
-function gaiaOriginURL(name, scheme, domain, port) {
-  return scheme + name + '.' + domain + (port ? port : '');
-}
-
-function gaiaManifestURL(name, scheme, domain, port) {
-  return gaiaOriginURL(name, scheme, domain, port) + '/manifest.webapp';
 }
 
 function getDistributionFileContent(name, defaultContent, distDir) {
@@ -490,7 +506,7 @@ function processEvents(exitResultFunc) {
   do {
     exitResult = exitResultFunc();
     thread.processNextEvent(true);
-  } while(thread.hasPendingEvents() || exitResult.wait);
+  } while (thread.hasPendingEvents() || exitResult.wait);
   if (exitResult.error) {
     throw exitResult.error;
   }
@@ -507,7 +523,7 @@ function getTempFolder(dirName) {
 
 function getXML(file) {
   try {
-    var parser = Cc["@mozilla.org/xmlextras/domparser;1"]
+    var parser = Cc['@mozilla.org/xmlextras/domparser;1']
              .createInstance(Ci.nsIDOMParser);
     let content = getFileContent(file);
     return parser.parseFromString(content, 'application/xml');
@@ -527,7 +543,7 @@ function log(/*tag, ...*/) {
     return;
   }
   var msg = '[' + arguments[0] + ']';
-  for(var i = 1; i < arguments.length; i++) {
+  for (var i = 1; i < arguments.length; i++) {
     msg += ' ' + arguments[i];
   }
   dump(msg + '\n');
@@ -633,7 +649,7 @@ function Commander(cmd) {
 
   // paths can be string or array, we'll eventually store one workable
   // path as _path.
-  this.initPath = function (paths) {
+  this.initPath = function(paths) {
     if (typeof paths === 'string') {
       _path = paths;
     } else if (typeof paths === 'object' && paths.length) {
@@ -658,10 +674,9 @@ function Commander(cmd) {
     }
   };
 
-  this.run = function (args, callback) {
-    var process = Cc["@mozilla.org/process/util;1"]
+  this.run = function(args, callback) {
+    var process = Cc['@mozilla.org/process/util;1']
                   .createInstance(Ci.nsIProcess);
-    var output = null;
     try {
       process.init(_file);
       process.run(true, args, args.length);
@@ -670,9 +685,15 @@ function Commander(cmd) {
       throw new Error('having trouble when execute ' + command +
         ' ' + args.join(' '));
     }
-    return output;
+    callback && callback();
   };
 };
+
+function getEnv(name) {
+  var env = Cc['@mozilla.org/process/environment;1'].
+            getService(Ci.nsIEnvironment);
+  return env.get(name);
+}
 
 // Get PATH of the environment
 function getEnvPath() {
@@ -680,11 +701,9 @@ function getEnvPath() {
   if (!os) {
     throw new Error('cannot not read system type');
   }
-  var env = Cc["@mozilla.org/process/environment;1"].
-            getService(Ci.nsIEnvironment);
-  var p = env.get('PATH');
-  var isMsys = env.get('OSTYPE') ? true : false;
-  if (os.indexOf('WIN')!== -1 && !isMsys) {
+  var p = getEnv('PATH');
+  var isMsys = getEnv('OSTYPE') ? true : false;
+  if (os.indexOf('WIN') !== -1 && !isMsys) {
     paths = p.split(';');
   } else {
     paths = p.split(':');
@@ -692,7 +711,29 @@ function getEnvPath() {
   return paths;
 }
 
+function killAppByPid(appName, gaiaDir) {
 
+  var sh = new Commander('sh');
+  sh.initPath(getEnvPath(), function() {});
+  var tempFileName = 'tmpFile';
+  var tmpFileSrc = joinPath(gaiaDir, tempFileName);
+  sh.run(['-c', 'touch ' + tempFileName]);
+  sh.run(['-c', 'adb shell b2g-ps > ' + tmpFileSrc]);
+  var tempFile = getFile(tmpFileSrc);
+  var content = getFileContent(tempFile);
+  var pidMap = utils.psParser(content);
+  sh.run(['-c', 'rm ' + tempFileName]);
+  if (pidMap[appName] && pidMap[appName].PID) {
+    sh.run(['-c', 'adb shell kill ' + pidMap[appName].PID]);
+  }
+}
+
+function getDocument(content) {
+  var DOMParser = CC('@mozilla.org/xmlextras/domparser;1', 'nsIDOMParser');
+  return document = (new DOMParser()).parseFromString(content, 'text/html');
+}
+
+exports.Q = Promise;
 exports.ls = ls;
 exports.getFileContent = getFileContent;
 exports.writeContent = writeContent;
@@ -701,8 +742,6 @@ exports.ensureFolderExists = ensureFolderExists;
 exports.getJSON = getJSON;
 exports.getFileAsDataURI = getFileAsDataURI;
 exports.makeWebappsObject = makeWebappsObject;
-exports.gaiaOriginURL = gaiaOriginURL;
-exports.gaiaManifestURL = gaiaManifestURL;
 exports.getDistributionFileContent = getDistributionFileContent;
 exports.resolve = resolve;
 exports.getGaia = getGaia;
@@ -730,3 +769,8 @@ exports.writeContentToFile = writeContentToFile;
 exports.processEvents = processEvents;
 exports.readZipManifest = readZipManifest;
 exports.log = log;
+exports.killAppByPid = killAppByPid;
+exports.getEnv = getEnv;
+exports.isExternalApp = isExternalApp;
+exports.getDocument = getDocument;
+exports.getWebapp = getWebapp;

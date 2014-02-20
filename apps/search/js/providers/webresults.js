@@ -1,3 +1,5 @@
+/* global eme, Provider, Search */
+
 (function() {
 
   'use strict';
@@ -6,24 +8,32 @@
 
   WebResults.prototype = {
 
-    __proto__: AppProvider.prototype,
+    __proto__: Provider.prototype,
 
     name: 'WebResults',
 
     init: function() {
-      AppProvider.prototype.init.apply(this, arguments);
+      Provider.prototype.init.apply(this, arguments);
       eme.init();
     },
 
     click: function(e) {
       var url = e.target && e.target.dataset.url;
       if (url) {
-        Search.navigate(url);
+        Search.navigate(url, {
+          icon: e.target.dataset.icon,
+          originUrl: url,
+          originName: e.target.dataset.title
+        });
       }
     },
 
     search: function(input) {
       this.clear();
+      if (!eme.api.Apps) {
+        return;
+      }
+
       this.request = eme.api.Apps.search({
         'query': input
       });
@@ -36,7 +46,9 @@
               title: app.name,
               icon: app.icon,
               dataset: {
-                url: app.appUrl
+                title: app.name,
+                url: app.appUrl,
+                icon: app.icon
               }
             };
           });

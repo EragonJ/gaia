@@ -1,20 +1,16 @@
 define(function(require, exports, module) {
-/*jshint laxbreak:true*/
-
 'use strict';
+
+/**
+ * TODO: Controllers should create views
+ */
 
 /**
  * Dependencies
  */
 
-var bindAll = require('utils/bindAll');
 var debug = require('debug')('controller:controls');
-
-/**
- * Locals
- */
-
-var proto = ControlsController.prototype;
+var bindAll = require('lib/bind-all');
 
 /**
  * Exports
@@ -26,95 +22,55 @@ exports = module.exports = function(app) {
 
 function ControlsController(app) {
   debug('initializing');
-  this.viewfinder = app.views.viewfinder;
-  this.controls = app.views.controls;
-  this.activity = app.activity;
-  this.camera = app.camera;
-  this.app = app;
   bindAll(this);
+  this.app = app;
+  this.activity = app.activity;
+  this.controls = app.views.controls;
   this.bindEvents();
-  this.setup();
+  this.configure();
   debug('initialized');
 }
 
-proto.bindEvents = function() {
-  var controls = this.controls;
-  var camera = this.camera;
-
-  // Bind events
-  camera.on('focusFailed', controls.enableButtons);
-  camera.on('previewResumed', controls.enableButtons);
-  camera.on('preparingToTakePicture', controls.disableButtons);
-  camera.on('change:videoElapsed', this.onVideoTimeUpdate);
-  camera.on('change:recording', this.onRecordingChange);
-  camera.on('change:mode', this.onCameraModeChange);
-
-  // Respond to UI events
-  controls.on('click:switch', this.onSwitchButtonClick);
-  controls.on('click:capture', this.onCaptureButtonClick);
-  controls.on('click:cancel', this.onCancelButtonClick);
-  controls.on('click:gallery', this.onGalleryButtonClick);
-
+ControlsController.prototype.bindEvents = function() {
+  this.app.settings.on('change:mode', this.controls.setter('mode'));
+  this.app.on('change:recording', this.controls.setter('recording'));
+  this.app.on('camera:timeupdate', this.controls.setVideoTimer);
+  this.controls.on('click:capture', this.app.firer('capture'));
+  this.controls.on('click:gallery', this.onGalleryButtonClick);
+  this.controls.on('click:switch', this.app.settings.toggler('mode'));
+  this.controls.on('click:cancel', this.onCancelButtonClick);
+  this.app.on('camera:loading', this.disableButtons);
+  this.app.on('camera:ready', this.enableButtons);
+  this.app.on('camera:busy', this.disableButtons);
   debug('events bound');
 };
 
-proto.setup = function() {
-  var activity = this.activity;
-  var controls = this.controls;
-  var mode = this.camera.get('mode');
-  var isCancellable = activity.active;
-  var showCamera = !activity.active || activity.allowedTypes.image;
-  var showVideo = !activity.active || activity.allowedTypes.video;
-  var isSwitchable = showVideo && showCamera;
+ControlsController.prototype.configure = function() {
+  var isSwitchable = this.app.settings.mode.get('options').length > 1;
+  var initialMode = this.app.settings.mode.value();
+  var isCancellable = !!this.app.activity.active;
 
   // The gallery button should not
   // be shown if an activity is pending
   // or the application is in 'secure mode'.
-  var showGallery = !activity.active && !this.app.inSecureMode;
+  var showGallery = !this.app.activity.active && !this.app.inSecureMode;
 
-  controls.set('mode', mode);
-  controls.set('gallery', showGallery);
-  controls.set('cancel', isCancellable);
-  controls.set('switchable', isSwitchable);
+  this.controls.set('gallery', showGallery);
+  this.controls.set('cancel', isCancellable);
+  this.controls.set('switchable', isSwitchable);
+  this.controls.set('mode', initialMode);
 };
 
-proto.onCameraModeChange = function(value) {
-  this.controls.set('mode', value);
-  debug('camera mode change: %s', value);
+ControlsController.prototype.disableButtons = function() {
+  this.controls.disable('buttons');
 };
 
-proto.onRecordingChange = function(value) {
-  this.controls.set('recording', value);
+ControlsController.prototype.enableButtons = function() {
+  this.controls.enable('buttons');
 };
 
-proto.onVideoTimeUpdate = function(value) {
-  this.controls.setVideoTimer(value);
-};
-
-/**
- * Fades the viewfinder out,
- * changes the camera capture
- * mode. Then fades the viewfinder
- * back in.
- *
- */
-proto.onSwitchButtonClick = function() {
-  var controls = this.controls;
-  var viewfinder = this.viewfinder;
-  var camera = this.camera;
-
-  camera.toggleMode();
-  controls.disableButtons();
-  viewfinder.fadeOut(onFadeOut);
-
-  function onFadeOut() {
-    camera.loadStreamInto(viewfinder.el, onStreamLoaded);
-  }
-
-  function onStreamLoaded() {
-    controls.enableButtons();
-    viewfinder.fadeIn();
-  }
+ControlsController.prototype.onSwitchClick = function() {
+  this.app.settings.get('mode').next();
 };
 
 /**
@@ -127,9 +83,11 @@ proto.onSwitchButtonClick = function() {
  * that initiated the activity.
  *
  */
-proto.onCancelButtonClick = function() {
+ControlsController.prototype.onCancelButtonClick = function() {
   this.activity.cancel();
 };
+
+var throttleGalleryLaunch = false;
 
 /**
  * Open the gallery app
@@ -137,36 +95,32 @@ proto.onCancelButtonClick = function() {
  * is pressed.
  *
  */
-proto.onGalleryButtonClick = function() {
+ControlsController.prototype.onGalleryButtonClick = function(e) {
+  e.stopPropagation();
   var MozActivity = window.MozActivity;
 
   // Can't launch the gallery if the lockscreen is locked.
   // The button shouldn't even be visible in this case, but
   // let's be really sure here.
-  if (this.app.inSecureMode) {
+  if (this.app.inSecureMode) { return; }
+
+  if (throttleGalleryLaunch) {
     return;
   }
+
+  throttleGalleryLaunch = true;
 
   // Launch the gallery with an activity
   this.mozActivity = new MozActivity({
     name: 'browse',
     data: { type: 'photos' }
   });
-};
 
-/**
- * Capture when the capture
- * button is pressed.
- *
- */
-proto.onCaptureButtonClick = function() {
-  var position = this.app.geolocation.position;
-  this.camera.capture({ position: position });
-
-  // Disable controls for 500ms to
-  // prevent rapid fire button bashing.
-  this.controls.disableButtons();
-  setTimeout(this.controls.enableButtons, 500);
+  // Wait 2000ms before re-enabling the Gallery to be launched
+  // (Bug 957709)
+  window.setTimeout(function() {
+    throttleGalleryLaunch = false;
+  }, 2000);
 };
 
 });

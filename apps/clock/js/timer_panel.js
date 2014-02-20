@@ -7,8 +7,8 @@ var View = require('view');
 
 var Utils = require('utils');
 var Timer = require('timer');
+var Sounds = require('sounds');
 var FormButton = require('form_button');
-var _ = require('l10n').get;
 
 var priv = new WeakMap();
 
@@ -56,15 +56,15 @@ Timer.Panel = function(element) {
 
   // Gather elements
   [
-    'create', 'cancel', 'dialog',
-    'pause', 'start', 'sound', 'time', 'vibrate'
+    'create', 'cancel', 'dialog', 'pause', 'start', 'sound', 'time', 'vibrate',
+    'plus'
   ].forEach(function(id) {
     this.nodes[id] = this.element.querySelector('#timer-' + id);
   }, this);
 
   // Bind click events
   [
-    'create', 'cancel', 'pause', 'start'
+    'create', 'cancel', 'pause', 'start', 'plus'
   ].forEach(function(action) {
     var element = this.nodes[action];
 
@@ -87,11 +87,7 @@ Timer.Panel = function(element) {
 
   var soundMenuConfig = {
     id: 'timer-sound-menu',
-    formatLabel: function(sound) {
-      return (sound === null || sound === '0') ?
-        _('noSound') :
-        _(sound.replace('.', '_'));
-    }
+    formatLabel: Sounds.formatLabel
   };
   this.soundButton = new FormButton(sound, soundMenuConfig);
   this.soundButton.refresh();
@@ -99,6 +95,10 @@ Timer.Panel = function(element) {
   View.instance(element, Timer.Panel).on(
     'visibilitychange', this.onvisibilitychange.bind(this)
   );
+
+  View.instance(element, Timer.Panel).once(
+    'visibilitychange',
+    setTimeout.bind(window, this.picker.reset.bind(this.picker), 0));
 };
 
 Timer.Panel.prototype = Object.create(Panel.prototype);
@@ -131,6 +131,8 @@ Timer.Panel.prototype.onvisibilitychange = function(isVisible) {
         this.tick();
       }
     }
+  } else {
+    this.pauseAlarm();
   }
 };
 
@@ -148,8 +150,6 @@ Timer.Panel.prototype.dialog = function(opts = { isVisible: true }) {
     Utils.cancelAnimationAfter(this.tickTimeout);
   }
   View.instance(this.nodes.dialog).visible = opts.isVisible;
-
-  setTimeout(this.picker.reset.bind(this.picker), 0);
   return this;
 };
 
@@ -170,7 +170,6 @@ Timer.Panel.prototype.tick = function() {
  * @return {Object} Timer.Panel.
  */
 Timer.Panel.prototype.update = function(remaining = 0) {
-  var cur = this.nodes.time.textContent;
   this.nodes.time.textContent = Utils.format.hms(
     (remaining - (remaining % 1000)) / 1000, 'hh:mm:ss');
   return this;
@@ -201,7 +200,7 @@ Timer.Panel.prototype.previewAlarm = function() {
   }
   this.ringtonePlayer.pause();
 
-  var ringtoneName = Utils.getSelectedValue(this.nodes.sound);
+  var ringtoneName = Utils.getSelectedValueByIndex(this.nodes.sound);
   var previewRingtone = 'shared/resources/media/alarms/' + ringtoneName;
   this.ringtonePlayer.src = previewRingtone;
   this.ringtonePlayer.play();
@@ -224,20 +223,28 @@ Timer.Panel.prototype.pauseAlarm = function() {
  */
 Timer.Panel.prototype.onclick = function(event) {
   var meta = priv.get(event.target);
+  var value = event.target.dataset.value;
   var panel = meta.panel;
   var nodes = panel.nodes;
   var time;
 
   if (panel.timer && panel.timer[meta.action]) {
-    // meta.action => panel.timer[meta.action]()
-    //
-    // ie.
-    //
-    // if start => panel.timer.start()
-    // if pause => panel.timer.pause()
-    // if cancel => panel.timer.cancel()
-    //
-    panel.timer[meta.action]();
+    if (typeof value !== 'undefined') {
+      // meta.action === 'plus' => panel.timer.plus(+value);
+
+      panel.timer[meta.action](+value);
+      panel.update(panel.timer.remaining);
+    } else {
+      // meta.action => panel.timer[meta.action]()
+      //
+      // ie.
+      //
+      // if start => panel.timer.start()
+      // if pause => panel.timer.pause()
+      // if cancel => panel.timer.cancel()
+      //
+      panel.timer[meta.action]();
+    }
 
     if (meta.action === 'cancel' || meta.action === 'new') {
       // Restore the panel to configured duration

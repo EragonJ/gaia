@@ -433,13 +433,13 @@ var ScreenManager = {
   _reconfigScreenTimeout: function scm_reconfigScreenTimeout() {
     // Remove idle timer if screen wake lock is acquired or
     // if no app has been displayed yet.
-    if (this._screenWakeLocked || !AppWindowManager ||
+    if (this._screenWakeLocked || typeof(AppWindowManager) !== 'object' ||
         !AppWindowManager.getDisplayedApp()) {
       this._setIdleTimeout(0);
     // The screen should be turn off with shorter timeout if
     // it was never unlocked.
     } else if (!this._unlocking) {
-      if (LockScreen.locked) {
+      if (window.lockScreen && window.lockScreen.locked) {
         this._setIdleTimeout(10, true);
         window.addEventListener('will-unlock', this);
         window.addEventListener('lockpanelchange', this);

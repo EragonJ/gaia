@@ -1,6 +1,6 @@
 var Calendar = require('./calendar'),
-    Marionette = require('marionette-client');
-    assert = require('assert');
+    Marionette = require('marionette-client'),
+    assert = require('chai').assert;
 
 marionette('day view', function() {
   var app;
@@ -10,21 +10,14 @@ marionette('day view', function() {
     app = new Calendar(client);
     app.launch({ hideSwipeHint: true });
     // Go to day view
-    app.findElement('dayButton').click();
+    app.waitForElement('dayButton').click();
+    client.waitFor(app.isDayViewActive.bind(app));
   });
 
-  test.skip('header copy should not overflow', function() {
-    var header = app.findElement('monthYearHeader');
-    var wid = header.scriptWith(function(el) {
-      return {
-        content: el.scrollWidth,
-        container: el.getBoundingClientRect().width
-      };
-    });
-    // we need to check the widths are != 0 since element might be hidden
-    assert.ok(wid.content, 'content width is not valid');
-    assert.ok(wid.container, 'container width is not valid');
-    assert.equal(wid.content, wid.container,
-      'content is bigger than container');
+  test('header copy should not overflow', function() {
+    var header = app.waitForElement('monthYearHeader');
+    // XXX: we don't use app.checkOverflow() because of Bug 971691
+    // 20 chars is a "safe" limit if font-family is Fira Sans
+    assert.operator(header.text().length, '<', 21);
   });
 });

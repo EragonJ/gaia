@@ -15,14 +15,13 @@
    * We should care about the need of testing,
    * and make all stateful objects become instance-able.
    *
-   * @param {LockScreen.intentionRouter} |ir| intentionRouter.
    * @param {Object} |opts| (Opional) addtional, options that may overwrite the
    *                        default settings.
    *                        The options should follow default settings above.
    * @constructor
    */
-  var LockScreenSlide = function(ir, opts) {
-    this.initialize(ir, opts);
+  var LockScreenSlide = function(opts) {
+    this.initialize(opts);
   };
 
   var LockScreenSlidePrototype = {
@@ -135,28 +134,23 @@
     resources: {
       larrow: '/style/lockscreen/images/larrow.png',
       rarrow: '/style/lockscreen/images/rarrow.png'
-    },
-
-    // How we communicate with the LockScreen.
-    intentionRouter: null
+    }
   };
 
   /**
    * Initialize this unlocker strategy.
    *
-   * @param {IntentionRouter} |ir| see LockScreen's intentionRouter.
    * @param {Object} |opts| (Opional) addtional, options that may overwrite the
    *                        default settings.
    *                        The options should follow default settings above.
    * @this {LockScreenSlide}
    */
   LockScreenSlidePrototype.initialize =
-    function(ir, opts) {
-      this.intentionRouter = ir;
+    function(opts) {
       if (opts)
         this._overwriteSettings(opts);
       this._initializeCanvas();
-      ir.unlockerInitialize();
+      this.publish('lockscreenslide-unlocker-initializer');
       this.states.initialized = true;
     };
 
@@ -207,16 +201,23 @@
           break;
 
         case 'touchstart':
-            if (evt.target === this.area) {
-              this.states.touch.id = evt.touches[0].identifier;
-              this._onSlideBegin(this._dpx(evt.touches[0].pageX));
-              window.addEventListener('touchend', this);
-              window.addEventListener('touchmove', this);
-            }
-            evt.preventDefault();
+          evt.preventDefault();
+          if (evt.target !== this.area || evt.touches.length > 1) {
+            return;
+          }
+          this.states.touch.id = evt.touches[0].identifier;
+          this._onSlideBegin(this._dpx(evt.touches[0].pageX));
+          window.addEventListener('touchend', this);
+          window.addEventListener('touchmove', this);
           break;
 
         case 'touchmove':
+          // In order to prevent pocket unlocks we reset the slide progress and
+          // end the gesture detection if a new touch point appears on screen.
+          if (evt.touches.length > 1) {
+            this._endGesture();
+            return;
+          }
           // Records touch states.
           this._onTouchMove(
             this._dpx(evt.touches[0].pageX),
@@ -230,13 +231,8 @@
         case 'touchend':
           if (evt.changedTouches[0].identifier !== this.states.touch.id)
             return;
-          window.removeEventListener('touchmove', this);
-          window.removeEventListener('touchend', this);
 
-          this.states.sliding = false;
-          this._onSlideEnd();
-          this._resetTouchStates();
-          this.overlay.classList.remove('touched');
+          this._endGesture();
           break;
       }
     };
@@ -397,11 +393,13 @@
           if (isLeft) {
             slow = this.states.touch.deltaX > 0;
             if (prevState !== currentState)
-              this.intentionRouter.nearLeft(currentState, prevState);
+              this.publish('lockscreenslide-near-left',
+                  {'currentState': currentState, 'prevState': prevState});
           } else {
             slow = this.states.touch.deltaX < 0;
             if (prevState !== currentState)
-              this.intentionRouter.nearRight(currentState, prevState);
+              this.publish('lockscreenslide-near-right',
+                  {'currentState': currentState, 'prevState': prevState});
           }
       } else {
         var prevState = this.handle.autoExpand.accState;
@@ -410,10 +408,12 @@
         if (prevState !== currentState) {
           if (isLeft) {
             if (prevState !== currentState)
-              this.intentionRouter.nearLeft(currentState, prevState);
+              this.publish('lockscreenslide-near-left',
+                  {'currentState': currentState, 'prevState': prevState});
           } else {
             if (prevState !== currentState)
-              this.intentionRouter.nearRight(currentState, prevState);
+              this.publish('lockscreenslide-near-right',
+                  {'currentState': currentState, 'prevState': prevState});
           }
         }
       }
@@ -446,10 +446,27 @@
         return; // Do nothing.
       }
 
-      this.intentionRouter.unlockingStart();
+      this.publish('lockscreenslide-unlocking-start');
       this.states.touch.initX = tx;
       this.states.sliding = true;
       this._lightIcons();
+    };
+
+  /**
+   * Encapsulating all the cleanups needed at the end of a gesture.
+   *
+   * @this {LockScreenSlide}
+   */
+  LockScreenSlidePrototype._endGesture =
+    function lss_endGesture() {
+      window.removeEventListener('touchmove', this);
+      window.removeEventListener('touchend', this);
+
+      this.states.sliding = false;
+      this._onSlideEnd();
+      this._resetTouchStates();
+      this.overlay.classList.remove('touched');
+      this.states.slideReachEnd = false;
     };
 
   /**
@@ -472,16 +489,16 @@
       if (false === this.states.slideReachEnd) {
         this._bounceBack(this.states.touch.pageX, bounceEnd);
       } else {
-        var intention = isLeft ? this.intentionRouter.activateLeft :
-          this.intentionRouter.activateRight;
-        intention();
+        var intention = isLeft ? 'lockscreenslide-activate-left' :
+          'lockscreenslide-activate-right';
+        this.publish(intention);
 
         // Restore it only after screen changed.
         var appLaunchDelay = 400;
         setTimeout(bounceEnd, appLaunchDelay);
       }
 
-      this.intentionRouter.unlockingStop();
+      this.publish('lockscreenslide-unlocking-stop');
       this._darkIcons();
     };
 
@@ -890,6 +907,7 @@
   LockScreenSlidePrototype._resetTouchStates =
     function lss_resetTouchStates() {
       this.states.touch = {
+        id: null,
         touched: false,
         initX: this.center.x,
         pageX: this.center.x,
@@ -898,6 +916,11 @@
         prevX: this.center.x,
         deltaX: 0
       };
+    };
+
+  LockScreenSlidePrototype.publish =
+    function lss_publish(type, detail) {
+      window.dispatchEvent(new CustomEvent(type, {'detail': detail}));
     };
 
   LockScreenSlide.prototype = LockScreenSlidePrototype;

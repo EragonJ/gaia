@@ -331,6 +331,12 @@ function handleScreenLayoutChange() {
   // text to have correct ellipsis position. Otherwise, we update them when
   // leaving fullscreen mode.
   if (currentLayoutMode !== LAYOUT_MODE.fullscreenPlayer) {
+    // XXX: to workaround bug 961636 which fires two resize event at the app
+    // start-up,we need to check the existence of thumbnailList before using
+    // it.
+    if (!thumbnailList) {
+      return;
+    }
     thumbnailList.upateAllThumbnailTitle();
   } else {
     pendingUpdateTitleText = true;
@@ -664,6 +670,7 @@ function updateLoadingSpinner() {
   if (processingQueue) {
     noMoreWorkCallback = updateLoadingSpinner;
   } else {
+    PerformanceTestingHelper.dispatch('scan-finished');
     dom.spinnerOverlay.classList.add('hidden');
     dom.playerView.classList.remove('disabled');
     if (thumbnailList.count) {
@@ -946,6 +953,17 @@ function showPlayer(video, autoPlay, enterFullscreen, keepControls) {
     } else {
       doneSeeking();
     }
+
+   if (window.navigator.mozNfc) {
+      // If we have NFC, we need to put the callback to have shrinking UI.
+      window.navigator.mozNfc.onpeerready = function(event) {
+        // The callback function is called when user confirm to share the
+        // content, send it with NFC Peer.
+        videodb.getFile(video.name, function(file) {
+          navigator.mozNfc.getNFCPeer(event.detail).sendFile(file);
+        });
+      };
+    }
   });
 }
 
@@ -958,6 +976,10 @@ function hidePlayer(updateVideoMetadata, callback) {
   }
 
   dom.player.pause();
+  if (window.navigator.mozNfc) {
+    // We need to remove onpeerready while out of sharable context.
+    window.navigator.mozNfc.onpeerready = null;
+  }
 
   function completeHidingPlayer() {
     // switch to the video gallery view

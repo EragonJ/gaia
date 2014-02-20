@@ -77,6 +77,14 @@
     PAGEVIEW_SOURCES = _config.pageViewSources;
 
     DISPLAY_INSTALLED_APPS = _config.displayInstalledApps;
+
+    if (mozSettings) {
+      mozSettings.addObserver('language.current', function onLanguageChange(e) {
+        // close any open collection when language changes
+        // to force UI update to the new language
+        Evme.Collection.hide();
+      });
+    }
   };
 
   // l10n: create a mutation observer to know when a node was added
@@ -707,10 +715,10 @@
     }
 
     function saveToHomescreen(data, showConfirm) {
-      var isAppInstalled = EvmeManager.isAppInstalled(data.app.getFavLink()),
+      var isBookmarked = EvmeManager.isBookmarked(data.app.getFavLink()),
         classList = data.el.classList;
 
-      if (isAppInstalled) {
+      if (isBookmarked) {
         classList.add(CLASS_WHEN_SAVING_TO_HOMESCREEN);
         window.alert(Evme.Utils.l10n(L10N_SYSTEM_ALERT, 'app-install-exists', {
           'name': data.data.name

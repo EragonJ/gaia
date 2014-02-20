@@ -1,5 +1,4 @@
 define(function(require, exports, module) {
-/*jshint laxbreak:true*/
 'use strict';
 
 /**
@@ -7,23 +6,29 @@ define(function(require, exports, module) {
  */
 
 var performanceTesting = require('performanceTesting');
+var ViewfinderView = require('views/viewfinder');
+var ControlsView = require('views/controls');
+var FocusRing = require('views/focus-ring');
+var lockscreen = require('lib/lock-screen');
 var constants = require('config/camera');
-var bindAll = require('utils/bindAll');
-var lockscreen = require('lockscreen');
-var broadcast = require('broadcast');
+var broadcast = require('lib/broadcast');
+var bindAll = require('lib/bind-all');
+var model = require('vendor/model');
 var debug = require('debug')('app');
 var LazyL10n = require('LazyL10n');
-var bind = require('utils/bind');
-var evt = require('vendor/evt');
-var dcf = require('dcf');
+var HudView = require('views/hud');
+var bind = require('lib/bind');
+var dcf = require('lib/dcf');
 
 /**
  * Locals
  */
 
 var LOCATION_PROMPT_DELAY = constants.PROMPT_DELAY;
-var proto = evt.mix(App.prototype);
 var unbind = bind.unbind;
+
+// Mixin model methods
+model(App.prototype);
 
 /**
  * Exports
@@ -42,19 +47,21 @@ module.exports = App;
  * @constructor
  */
 function App(options) {
+  bindAll(this);
+  this.views = {};
   this.el = options.el;
   this.win = options.win;
   this.doc = options.doc;
   this.inSecureMode = (this.win.location.hash === '#secure');
+  this.controllers = options.controllers;
   this.geolocation = options.geolocation;
-  this.activity = options.activity;
   this.filmstrip = options.filmstrip;
+  this.activity = options.activity;
+  this.config = options.config;
+  this.settings = options.settings;
   this.storage = options.storage;
   this.camera = options.camera;
   this.sounds = options.sounds;
-  this.views = options.views;
-  this.controllers = options.controllers;
-  bindAll(this);
   debug('initialized');
 }
 
@@ -62,19 +69,25 @@ function App(options) {
  * Runs all the methods
  * to boot the app.
  *
+ * @public
  */
-proto.boot = function() {
-  debug('boot');
-  this.filmstrip = this.filmstrip(this);
+App.prototype.boot = function() {
+  this.setInitialMode();
+  this.initializeViews();
   this.runControllers();
-  this.injectContent();
+  this.injectViews();
   this.bindEvents();
   this.miscStuff();
   this.emit('boot');
   debug('booted');
 };
 
-proto.teardown = function() {
+App.prototype.setInitialMode = function() {
+  var mode = this.activity.mode;
+  if (mode) { this.set('mode', mode, { silent: true }); }
+};
+
+App.prototype.teardown = function() {
   this.unbindEvents();
 };
 
@@ -82,41 +95,49 @@ proto.teardown = function() {
  * Runs controllers to glue all
  * the parts of the app together.
  *
+ * @private
  */
-proto.runControllers = function() {
+App.prototype.runControllers = function() {
   debug('running controllers');
+  this.filmstrip = this.filmstrip(this);
+  this.controllers.settings(this);
+  this.controllers.activity(this);
   this.controllers.camera(this);
   this.controllers.viewfinder(this);
   this.controllers.controls(this);
   this.controllers.confirm(this);
   this.controllers.overlay(this);
+  this.controllers.sounds(this);
   this.controllers.hud(this);
   debug('controllers run');
 };
 
-/**
- * Injects view DOM into
- * designated root node.
- *
- * @return {[type]} [description]
- */
-proto.injectContent = function() {
+App.prototype.initializeViews = function() {
+  this.views.viewfinder = new ViewfinderView();
+  this.views.controls = new ControlsView();
+  this.views.focusRing = new FocusRing();
+  this.views.hud = new HudView();
+  debug('views initialized');
+};
+
+App.prototype.injectViews = function() {
   this.views.hud.appendTo(this.el);
   this.views.controls.appendTo(this.el);
   this.views.viewfinder.appendTo(this.el);
   this.views.focusRing.appendTo(this.el);
-  debug('content injected');
+  debug('views injected');
 };
 
 /**
  * Attaches event handlers.
  *
  */
-proto.bindEvents = function() {
-  this.camera.once('configured', this.storage.check);
+App.prototype.bindEvents = function() {
   this.storage.once('checked:healthy', this.geolocationWatch);
   bind(this.doc, 'visibilitychange', this.onVisibilityChange);
   bind(this.win, 'beforeunload', this.onBeforeUnload);
+  bind(this.el, 'click', this.onClick);
+  //this.on('change', this.onStateChange);
   this.on('focus', this.onFocus);
   this.on('blur', this.onBlur);
   debug('events bound');
@@ -125,7 +146,7 @@ proto.bindEvents = function() {
 /**
  * Detaches event handlers.
  */
-proto.unbindEvents = function() {
+App.prototype.unbindEvents = function() {
   unbind(this.doc, 'visibilitychange', this.onVisibilityChange);
   unbind(this.win, 'beforeunload', this.onBeforeUnload);
   this.off('focus', this.onFocus);
@@ -141,7 +162,7 @@ proto.unbindEvents = function() {
  * may have made changes since the
  * app was minimised
  */
-proto.onFocus = function() {
+App.prototype.onFocus = function() {
   var ms = LOCATION_PROMPT_DELAY;
   setTimeout(this.geolocationWatch, ms);
   this.storage.check();
@@ -152,10 +173,15 @@ proto.onFocus = function() {
  * Tasks to run when the
  * app is minimised/hidden.
  */
-proto.onBlur = function() {
+App.prototype.onBlur = function() {
   this.geolocation.stopWatching();
   this.activity.cancel();
   debug('blur');
+};
+
+App.prototype.onClick = function() {
+  debug('click');
+  this.emit('click');
 };
 
 /**
@@ -165,7 +191,7 @@ proto.onBlur = function() {
  * isn't currently hidden.
  *
  */
-proto.geolocationWatch = function() {
+App.prototype.geolocationWatch = function() {
   var shouldWatch = !this.activity.active && !this.doc.hidden;
   if (shouldWatch) {
     this.geolocation.watch();
@@ -177,23 +203,22 @@ proto.geolocationWatch = function() {
  * Responds to the `visibilitychange`
  * event, emitting useful app events
  * that allow us to perform relate
- * work elsewhere,
+ * work elsewhere.
  *
+ * @private
  */
-proto.onVisibilityChange = function() {
-  if (this.doc.hidden) {
-    this.emit('blur');
-  } else {
-    this.emit('focus');
-  }
+App.prototype.onVisibilityChange = function() {
+  if (this.doc.hidden) { this.emit('blur'); }
+  else { this.emit('focus'); }
 };
 
 /**
  * Runs just before the
  * app is destroyed.
  *
+ * @private
  */
-proto.onBeforeUnload = function() {
+App.prototype.onBeforeUnload = function() {
   this.views.viewfinder.setPreviewStream(null);
   this.emit('beforeunload');
   debug('beforeunload');
@@ -209,7 +234,7 @@ proto.onBeforeUnload = function() {
  * logic will sit in specific places.
  *
  */
-proto.miscStuff = function() {
+App.prototype.miscStuff = function() {
   var camera = this.camera;
   var focusTimeout;
   var self = this;

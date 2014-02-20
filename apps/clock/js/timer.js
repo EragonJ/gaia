@@ -4,8 +4,6 @@ define(function(require) {
 var Emitter = require('emitter');
 var asyncStorage = require('shared/js/async_storage');
 var Utils = require('utils');
-var storeName = 'timers';
-var timer = null;
 
 var timerPrivate = new WeakMap();
 
@@ -123,8 +121,15 @@ Timer.prototype.register = function timerRegister(callback) {
   var data = {
     type: 'timer'
   };
-  var request = navigator.mozAlarms.add(
-    new Date(Date.now() + this.remaining), 'ignoreTimezone', data);
+  var request;
+
+  // Remove previously-created mozAlarm for this alarm, if necessary.
+  this.unregister();
+
+  request = navigator.mozAlarms.add(
+    new Date(Date.now() + this.remaining), 'ignoreTimezone', data
+  );
+
   request.onsuccess = (function(ev) {
     this.id = ev.target.result;
     callback && callback(null, this);
@@ -209,6 +214,22 @@ Timer.prototype.cancel = function timerReset() {
     this.duration = this.configuredDuration;
     this.emit('end');
   }
+};
+
+/**
+ * plus Increase the duration and extend the endAt time
+ *
+ * @param {Number} seconds The time in seconds to add.
+ *
+ * @return {Timer} Timer instance.
+ */
+Timer.prototype.plus = function timerPlus(seconds) {
+  // Convert to ms
+  var ms = seconds * 1000;
+
+  this.duration += ms;
+
+  return this;
 };
 
 /**

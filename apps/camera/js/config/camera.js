@@ -7,7 +7,7 @@ define(function(require, exports, module) {
 
 module.exports = {
   CAMERA_MODE_TYPE: {
-    CAMERA: 'camera',
+    PICTURE: 'picture',
     VIDEO: 'video'
   },
 

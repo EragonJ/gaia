@@ -11,6 +11,8 @@ class TestPrivilegedAppGeolocationPrompt(GaiaTestCase):
 
     def setUp(self):
         GaiaTestCase.setUp(self)
+        self.apps.set_permission('UI tests - Privileged App', 'geolocation', 'prompt')
+
 
     def test_geolocation_prompt(self):
         uiTestsPrivileged = UiTestsPivileged(self.marionette)

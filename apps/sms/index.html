@@ -12,8 +12,9 @@
     <link rel="stylesheet" type="text/css" href="shared/style/headers.css">
     <link rel="stylesheet" type="text/css" href="shared/style/input_areas.css">
     <link rel="stylesheet" type="text/css" href="shared/style/switches.css">
-    <link rel="stylesheet" type="text/css" href="shared/style_unstable/lists.css">
-    <link rel="stylesheet" type="text/css" href="shared/style_unstable/progress_activity.css">
+    <link rel="stylesheet" type="text/css" href="shared/style/lists.css">
+    <link rel="stylesheet" type="text/css" href="shared/style/progress_activity.css">
+    <link rel="stylesheet" type="text/css" href="shared/style/status.css">
     <!-- App styles -->
     <link rel="stylesheet" type="text/css" href="style/root.css">
     <link rel="stylesheet" type="text/css" href="style/common.css">
@@ -33,6 +34,7 @@
     <script defer src="shared/js/settings_url.js"></script>
     <script defer src="shared/js/template.js"></script>
     <script defer src="shared/js/mime_mapper.js"></script>
+    <script defer src="shared/js/contact_photo_helper.js"></script>
     <script defer src="js/dialog.js"></script>
     <script defer src="js/blacklist.js"></script>
     <script defer src="js/contacts.js"></script>
@@ -47,7 +49,6 @@
     <script defer src="js/compose.js"></script>
     <script defer src="js/waiting_screen.js"></script>
     <script defer src="js/utils.js"></script>
-    <script defer src="js/fixed_header.js"></script>
     <script defer src="js/time_headers.js"></script>
     <script defer src="js/activity_picker.js"></script>
     <script defer src="js/wbmp.js"></script>
@@ -75,15 +76,14 @@
             <a href="#new" id="icon-add">
               <span class="icon icon-compose"></span>
             </a>
-            <a id="threads-edit-icon">
-              <span class="icon icon-edit"></span>
+            <a id="threads-options-icon">
+              <span class="icon icon-options"></span>
             </a>
           </menu>
           <h1 data-l10n-id="messages">Messages</h1>
         </header>
         <article id="threads-container" class="view-body" data-type="list">
         </article>
-        <div id="threads-header-container" class="fixed-title no-fixed-header"></div>
 
         <div id="threads-no-messages" class="hide">
           <div id="no-result-message">
@@ -113,6 +113,10 @@
             </button>
           </menu>
         </form>
+
+        <section id="threads-draft-saved-banner" class="hide" role="status">
+          <p data-l10n-id="message-draft-saved">Message saved as draft</p>
+        </section>
       </section>
 
       <section id="thread-messages" class="panel" role="region">
@@ -177,14 +181,12 @@
             <section id="messages-new-message-notice"
                     role="notification"
                     class="hide">
-              <div id="new-message-notice-content">
-                <div id="new-message-notice-container-1">
-                  <div id="new-message-notice-text" data-l10n-id="new-message-notice-text">You have new messages</div>
-                  <div id="new-message-notice-contact">Contact</div>
-                </div>
-                <div id="new-message-notice-container-2">
-                  <a role="button" data-l10n-id="new-message-notice-a-text">read it</a>
-                </div>
+              <div>
+                <div data-l10n-id="new-message-notice-text">You have new messages</div>
+                <div class="contact">Contact</div>
+              </div>
+              <div>
+                <a role="button" data-l10n-id="new-message-notice-a-text">read it</a>
               </div>
             </section>
           </div>
@@ -324,15 +326,15 @@
 
     <div id="information-report-tmpl" class="hide">
       <!--
-      <p class="${delivery}">
+      <p class="${deliveryClass}">
         <span data-l10n-id="message-delivered"></span>
         <span class="l10n-contains-date" data-l10n-id="${deliveryL10n}"
               data-l10n-date="${deliveryTimestamp}"
               data-l10n-date-format="${messageL10nDateFormat}"
               >${deliveryDateL10n}</span>
       </p>
-      <p class="${read}">
-        <span data-l10n-id="message-read"></span>
+      <p class="${readClass}">
+        <span data-l10n-id="message-read-title"></span>
         <span class="l10n-contains-date" data-l10n-id="${readL10n}"
               data-l10n-date="${readTimestamp}"
               data-l10n-date-format="${messageL10nDateFormat}"

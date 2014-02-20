@@ -219,6 +219,17 @@ body {
   overflow: hidden;
 }
 
+#secure-windows {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  top: 0;
+  height: 100%;
+  max-height: 100%;
+  border: 0rem;
+  overflow: hidden;
+}
+
 #dialog-overlay {
   position: absolute;
   top: 2rem;
@@ -286,23 +297,23 @@ body {
   }
 }
 
-#system-banner {
+.generic-dialog.banner {
   z-index: 0;
   visibility: hidden;
   opacity: 0;
   transform: translateY(100%);
 }
 
-#system-banner.visible {
+.generic-dialog.banner.visible {
   animation: banner-bounce 4s;
   visibility: visible;
 }
 
-#system-banner button {
+.generic-dialog.banner button {
   width: auto;
 }
 
-#system-banner[data-button="false"] button {
+.generic-dialog.banner[data-button="false"] button {
   visibility: hidden;
 }
 

@@ -63,9 +63,6 @@ var UtilityTray = {
       case 'keyboardchangecanceled':
       case 'simpinshow':
       case 'appopening':
-        if (Rocketbar.shown) {
-          Rocketbar.hide(evt.type);
-        }
         if (this.shown) {
           this.hide();
         }
@@ -86,10 +83,11 @@ var UtilityTray = {
         break;
 
       case 'touchstart':
-        if (LockScreen.locked)
+        evt.preventDefault();
+        if (window.lockScreen && window.lockScreen.locked)
           return;
         if (evt.target !== this.overlay &&
-            evt.target !== this.statusbar &&
+            evt.currentTarget !== this.statusbar &&
             evt.target !== this.grippy)
           return;
 
@@ -97,25 +95,25 @@ var UtilityTray = {
         break;
 
       case 'touchmove':
-        var touch = evt.touches[0];
-        if (!this.active) {
-          if (Rocketbar.enabled && !this.shown &&
-              touch.pageX < this.screenWidth * Rocketbar.triggerWidth) {
-            Rocketbar.pointerY = touch.pageY;
-          }
-          return;
-        }
-
-        this.onTouchMove(touch);
+        evt.preventDefault();
+        this.onTouchMove(evt.touches[0]);
         break;
 
       case 'touchend':
+        evt.preventDefault();
+        evt.stopImmediatePropagation();
+        var touch = evt.changedTouches[0];
+        if (Rocketbar.enabled && !this.shown && !this.active &&
+            touch.pageX < this.screenWidth * Rocketbar.triggerWidth) {
+          Rocketbar.render(true);
+        }
+
         if (!this.active)
           return;
 
         this.active = false;
 
-        this.onTouchEnd(evt.changedTouches[0]);
+        this.onTouchEnd(touch);
         break;
 
       case 'transitionend':
@@ -135,8 +133,6 @@ var UtilityTray = {
     if (Rocketbar.enabled && !this.shown &&
         touch.pageX < this.screenWidth * Rocketbar.triggerWidth) {
       UtilityTray.hide();
-      Rocketbar.pointerY = touch.pageY;
-      Rocketbar.render(this.screenHeight);
       return;
     } else {
       window.dispatchEvent(new CustomEvent('taskmanagerhide'));
@@ -148,10 +144,13 @@ var UtilityTray = {
     this.startY = touch.pageY;
 
     this.screen.classList.add('utility-tray');
-    this.onTouchMove({ pageY: touch.pageY + this.statusbar.offsetHeight });
   },
 
   onTouchMove: function ut_onTouchMove(touch) {
+    if (!this.active) {
+      return;
+    }
+
     var screenHeight = this.screenHeight;
 
     var y = touch.pageY;
@@ -172,7 +171,7 @@ var UtilityTray = {
   onTouchEnd: function ut_onTouchEnd(touch) {
 
     // Prevent utility tray shows while the screen got black out.
-    if (LockScreen.locked) {
+    if (window.lockScreen && window.lockScreen.locked) {
       this.hide(true);
     } else {
       var significant = (Math.abs(this.lastDelta) > (this.screenHeight / 5));
@@ -189,12 +188,12 @@ var UtilityTray = {
     var alreadyHidden = !this.shown;
     var style = this.overlay.style;
     style.MozTransition = instant ? '' : '-moz-transform 0.2s linear';
-    style.MozTransform = 'translateY(0)';
+    style.MozTransform = '';
     this.shown = false;
 
     // If the transition has not started yet there won't be any transitionend
     // event so let's not wait in order to remove the utility-tray class.
-    if (instant || style.MozTransform == 'translateY(0px)') {
+    if (instant || style.MozTransform == '') {
       this.screen.classList.remove('utility-tray');
     }
 

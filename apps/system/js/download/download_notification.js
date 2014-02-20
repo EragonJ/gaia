@@ -138,7 +138,7 @@ DownloadNotification.prototype = {
     };
 
     if (state === 'downloading') {
-      info.text = _('download_downloading_text', {
+      info.text = _('download_downloading_text_2', {
         name: this.fileName,
         percentage: DownloadFormatter.getPercentage(this.download)
       });
@@ -207,7 +207,7 @@ DownloadNotification.prototype = {
       case 'succeeded':
         // Attempts to open the file
         var download = this.download;
-        var req = DownloadHelper.launch(download);
+        var req = DownloadHelper.open(download);
 
         req.onerror = function req_onerror() {
           DownloadHelper.handlerError(req.error, download);

@@ -14,6 +14,8 @@ requireApp('communications/contacts/test/unit/mock_contacts_list_obj.js');
 requireApp('communications/contacts/test/unit/mock_fb.js');
 requireApp('communications/contacts/test/unit/mock_extfb.js');
 
+require('/shared/test/unit/mocks/mock_contact_photo_helper.js');
+
 var subject,
     container,
     realL10n,
@@ -48,7 +50,12 @@ var subject,
 
 var SCALE_RATIO = 1;
 
+var mocksHelperForDetailView = new MocksHelper([
+  'ContactPhotoHelper'
+]).init();
+
 suite('Render contact', function() {
+  mocksHelperForDetailView.attachTestHelpers();
 
   var isOnLine = true;
   function navigatorOnLine() {
@@ -362,6 +369,7 @@ suite('Render contact', function() {
         var currentElem = contactMultTel.tel[1][elem] + 'dup';
         contactMultTel.tel[1][elem] = currentElem;
       }
+      contactMultTel.tel[1].type = '';
       subject.setContact(contactMultTel);
       subject.render(null, TAG_OPTIONS);
       assert.include(container.innerHTML, 'phone-details-template-0');
@@ -371,7 +379,7 @@ suite('Render contact', function() {
       assert.include(container.innerHTML, contactMultTel.tel[0].type);
       assert.include(container.innerHTML, contactMultTel.tel[1].value);
       assert.include(container.innerHTML, contactMultTel.tel[1].carrier);
-      assert.include(container.innerHTML, contactMultTel.tel[1].type);
+      assert.include(container.innerHTML, subject.defaultTelType);
       assert.equal(-1, container.innerHTML.indexOf('phone-details-template-2'));
     });
   });

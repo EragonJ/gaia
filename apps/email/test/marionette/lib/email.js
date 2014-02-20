@@ -1,6 +1,6 @@
 /*jshint node: true, browser: true */
 function Email(client) {
-  this.client = client;
+  this.client = client.scope({ searchTimeout: 20000 });
 }
 module.exports = Email;
 
@@ -91,7 +91,7 @@ Email.prototype = {
   },
 
   get notificationBar() {
-    return this.client.findElement(Selector.notificationBar);
+    return this.client.helper.waitForElement(Selector.notificationBar);
   },
 
   tapNotificationBar: function() {
@@ -99,15 +99,15 @@ Email.prototype = {
   },
 
   get msgDownBtn() {
-    return this.client.findElement(Selector.msgDownBtn);
+    return this.client.helper.waitForElement(Selector.msgDownBtn);
   },
 
   get msgListScrollOuter() {
-    return this.client.findElement(Selector.msgListScrollOuter);
+    return this.client.helper.waitForElement(Selector.msgListScrollOuter);
   },
 
   get msgUpBtn() {
-    return this.client.findElement(Selector.msgUpBtn);
+    return this.client.helper.waitForElement(Selector.msgUpBtn);
   },
 
   /**
@@ -120,18 +120,14 @@ Email.prototype = {
   },
 
   getMessageReaderSubject: function() {
-    var el = this.client.findElement(Selector.msgEnvelopeSubject);
-    return el.text();
-  },
-
-  getComposeBody: function() {
-    var input = this.client.findElement(Selector.composeBodyInput);
-    var value = input.getAttribute('value');
-    return value;
+    return this.client.helper
+      .waitForElement(Selector.msgEnvelopeSubject)
+      .text();
   },
 
   getComposeTo: function() {
-    var container = this.client.findElement(Selector.composeEmailContainer);
+    var container =
+      this.client.helper.waitForElement(Selector.composeEmailContainer);
     var text = container.text();
     return text;
   },
@@ -165,9 +161,9 @@ Email.prototype = {
     this._tapNext(Selector.prefsNextButton, 'setup_done');
 
     this._waitForElementNoTransition(Selector.showMailButton);
-    this.client.
-      findElement(Selector.showMailButton).
-      tap();
+    this.client.helper
+      .waitForElement(Selector.showMailButton)
+      .tap();
     return this[finalActionName || 'waitForMessageList']();
   },
 
@@ -182,7 +178,7 @@ Email.prototype = {
     this.client.switchToFrame();
     this.client.apps.switchToApp(Email.EMAIL_ORIGIN);
     this.client.helper.waitForElement(Selector.manualConfigButton);
-    this.client.findElement(Selector.manualConfigButton).tap();
+    this.client.helper.waitForElement(Selector.manualConfigButton).tap();
   },
 
   tapFolderListButton: function() {
@@ -216,36 +212,36 @@ Email.prototype = {
   switchAccount: function(number) {
     var accountSelector = '.acct-list-container ' +
                           'a:nth-child(' + number + ')';
-    this.client.
-      findElement(accountSelector).
-      tap();
+    this.client.helper
+      .waitForElement(accountSelector)
+      .tap();
     this._waitForTransitionEnd('folder_picker');
   },
 
   tapSettingsButton: function() {
-    this.client.
-      findElement(Selector.settingsButton).
-      tap();
+    this.client.helper
+      .waitForElement(Selector.settingsButton)
+      .tap();
     this._waitForTransitionEnd('settings_main');
   },
 
   tapSettingsDoneButton: function() {
-    this.client.
-      findElement(Selector.settingsDoneButton).
-      tap();
+    this.client.helper
+      .waitForElement(Selector.settingsDoneButton)
+      .tap();
     this._waitForTransitionEnd('folder_picker');
   },
 
   tapSettingsAccountIndex: function(index) {
     var elements = this.client.findElements(Selector.settingsMainAccountItems);
-    elements[index].tap();
+    this.client.helper.waitForElement(elements[index]).tap();
     this._waitForTransitionEnd('settings_account');
   },
 
   tapAddAccountButton: function() {
-    this.client.
-      findElement(Selector.addAccountButton).
-      tap();
+    this.client.helper
+      .waitForElement(Selector.addAccountButton)
+      .tap();
     this._waitForTransitionEnd('setup_account_info');
   },
 
@@ -254,9 +250,9 @@ Email.prototype = {
   },
 
   tapAccountSettingsBackButton: function() {
-    this.client.
-      findElement(Selector.accountSettingsBackButton).
-      tap();
+    this.client.helper
+      .waitForElement(Selector.accountSettingsBackButton)
+      .tap();
     this._waitForTransitionEnd('settings_main');
   },
 
@@ -266,26 +262,41 @@ Email.prototype = {
   },
 
   typeTo: function(email) {
-    this.client.
-      findElement(Selector.composeEmailInput).
-      sendKeys(email);
+    this.client.helper
+      .waitForElement(Selector.composeEmailInput)
+      .sendKeys(email);
   },
 
-  typeSubject: function(string) {
-    this.client.
-      findElement(Selector.composeSubjectInput).
-      sendKeys(string);
+  typeSubject: function(subject) {
+    this.client.helper
+      .waitForElement(Selector.composeSubjectInput)
+      .sendKeys(subject);
   },
 
   typeBody: function(string) {
-    this.client.
-      findElement(Selector.composeBodyInput).
-      sendKeys(string);
+    var bodyInput = this.client.
+      findElement(Selector.composeBodyInput);
+    bodyInput.click();
+    bodyInput.sendKeys(string);
   },
 
+  /**
+   * Retrieve the textual representation of the contenteditable that is our
+   * compose area using the app logic that does this for when we save and
+   * send the draft.  Using innerHTML would not be realistic and textContent
+   * over-simplifies our newline handling as well as risking oddities in the
+   * future if we inline various affordances proposed by UX.
+   */
   getComposeBody: function() {
-    return this._waitForElementNoTransition(Selector.composeBodyInput)
-           .getAttribute('value');
+    return client.executeScript(function() {
+      var Cards = window.wrappedJSObject.require('mail_common').Cards,
+          card = Cards._cardStack[Cards.activeCardIndex];
+      if (card.cardDef.name !== 'compose')
+        throw new Error('active card should be compose!');
+
+      var composeCard = card.cardImpl;
+      return composeCard.fromEditor();
+    }, []);
   },
 
   abortCompose: function(cardId) {
@@ -312,18 +323,18 @@ Email.prototype = {
      *
      * We discuss and fix the issue in http://bugzil.la/907092
      */
-    client.
-      findElement(Selector.composeSendButton).
-      tap();
+    client.helper
+      .waitForElement(Selector.composeSendButton)
+      .tap();
     // wait for being in the email list page
     this._waitForElementNoTransition(Selector.refreshButton);
     this.waitForMessageList();
   },
 
   tapRefreshButton: function() {
-    this.client.
-      findElement(Selector.refreshButton).
-      tap();
+    this.client.helper
+      .waitForElement(Selector.refreshButton)
+      .tap();
   },
 
   waitForMessageList: function() {
@@ -358,7 +369,7 @@ Email.prototype = {
   getHeaderAtIndex: function(index) {
     var client = this.client;
     var elements = client.findElements(Selector.messageHeaderItem);
-    return elements[index];
+    return client.helper.waitForElement(elements[index]);
   },
 
   tapEmailAtIndex: function(index) {
@@ -387,12 +398,14 @@ Email.prototype = {
         element;
 
     for (var i = 0; i < messageHeadersLength; i++) {
-      if (messageHeaders[i].
-            findElement('.msg-header-subject').
-            text() === subject) {
+      var header = this.client.helper
+        .waitForChild(messageHeaders[i], '.msg-header-subject')
+        .text();
+      if (header === subject) {
         element = messageHeaders[i];
       }
     }
+
     return element;
   },
 
@@ -402,7 +415,7 @@ Email.prototype = {
   tapReply: function(mode) {
     var client = this.client;
     // open the reply menu
-    client.findElement(Selector.replyMenuButton).tap();
+    client.helper.waitForElement(Selector.replyMenuButton).tap();
     client.helper.waitForElement(Selector.replyMenu);
     // select the appropriate option
     var whichButton;
@@ -418,7 +431,7 @@ Email.prototype = {
       whichButton = Selector.replyMenuReply;
       break;
     }
-    client.findElement(whichButton).tap();
+    client.helper.waitForElement(whichButton).tap();
     this._waitForTransitionEnd('compose');
   },
 
@@ -523,21 +536,21 @@ Email.prototype = {
   },
 
   _setupTypeName: function(name) {
-    this.client.
-      findElement(Selector.setupNameInput).
-      sendKeys(name);
+    this.client.helper
+      .waitForElement(Selector.setupNameInput)
+      .sendKeys(name);
   },
 
   _setupTypeEmail: function(email) {
-    this.client.
-      findElement(Selector.setupEmailInput).
-      sendKeys(email);
+    this.client.helper
+      .waitForElement(Selector.setupEmailInput)
+      .sendKeys(email);
   },
 
   _setupTypePassword: function(password) {
-    this.client.
-      findElement(Selector.setupPasswordInput).
-      sendKeys(password);
+    this.client.helper
+      .waitForElement(setupPasswordInput)
+      .sendKeys(password);
   },
 
   _waitForElementNoTransition: function(selector) {
@@ -546,8 +559,7 @@ Email.prototype = {
   },
 
   _tapSelector: function(selector) {
-    this.client.helper.waitForElement(selector);
-    this.client.findElement(selector).tap();
+    this.client.helper.waitForElement(selector).tap();
   },
 
   _tapNext: function(selector, cardId) {
@@ -557,57 +569,57 @@ Email.prototype = {
   },
 
   _manualSetupTypeName: function(name) {
-    this.client.
-      findElement(Selector.manualSetupNameInput).
-      sendKeys(name);
+    this.client.helper
+      .waitForElement(Selector.manualSetupNameInput)
+      .sendKeys(name);
   },
 
   _manualSetupTypeEmail: function(email) {
-    this.client.
-      findElement(Selector.manualSetupEmailInput).
-      sendKeys(email);
+    this.client.helper
+      .waitForElement(Selector.manualSetupEmailInput)
+      .sendKeys(email);
   },
 
   _manualSetupTypePassword: function(password) {
-    this.client.
-      findElement(Selector.manualSetupPasswordInput).
-      sendKeys(password);
+    this.client.helper
+      .waitForElement(Selector.manualSetupPasswordInput)
+      .sendKeys(password);
   },
 
   _manualSetupTypeImapUsername: function(name) {
-    this.client.
-      findElement(Selector.manualSetupImapUsernameInput).
-      sendKeys(name);
+    this.client.helper
+      .waitForElement(Selector.manualSetupImapUsernameInput)
+      .sendKeys(name);
   },
 
   _manualSetupTypeImapHostname: function(hostname) {
-    this.client.
-      findElement(Selector.manualSetupImapHostnameInput).
-      sendKeys(hostname);
+    this.client.helper
+      .waitForElement(Selector.manualSetupImapHostnameInput)
+      .sendKeys(hostname);
   },
 
   _manualSetupTypeImapPort: function(port) {
     var manualSetupImapPortInput =
-        this.client.findElement(Selector.manualSetupImapPortInput);
+        this.client.helper.waitForElement(Selector.manualSetupImapPortInput);
     manualSetupImapPortInput.clear();
     manualSetupImapPortInput.sendKeys(port);
   },
 
   _manualSetupTypeSmtpUsername: function(name) {
-    this.client.
-      findElement(Selector.manualSetupSmtpUsernameInput).
-      sendKeys(name);
+    this.client.helper
+      .waitForElement(Selector.manualSetupSmtpUsernameInput)
+      .sendKeys(name);
   },
 
   _manualSetupTypeSmtpHostname: function(hostname) {
-    this.client.
-      findElement(Selector.manualSetupSmtpHostnameInput).
-      sendKeys(hostname);
+    this.client.helper
+      .waitForElement(Selector.manualSetupSmtpHostnameInput)
+      .sendKeys(hostname);
   },
 
   _manualSetupTypeSmtpPort: function(port) {
     var manualSetupSmtpPortInput =
-        this.client.findElement(Selector.manualSetupSmtpPortInput);
+        this.client.helper.waitForElement(Selector.manualSetupSmtpPortInput);
     manualSetupSmtpPortInput.clear();
     manualSetupSmtpPortInput.sendKeys(port);
   },
@@ -617,7 +629,7 @@ Email.prototype = {
    * need to hack the html to expose it (the backend will know about this).
    */
   _manualSetupUpdateSocket: function(type) {
-    var element = this.client.findElement(Selector[type]);
+    var element = this.client.helper.waitForElement(Selector[type]);
 
     // select is a real dom select element
     element.scriptWith(function(select) {

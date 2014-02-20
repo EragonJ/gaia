@@ -133,26 +133,14 @@ MessageReaderCard.prototype = {
   },
 
   postInsert: function() {
-    this.latestOnce('header', function() {
-      // iframes need to be linked into the DOM tree before their
-      // contentDocument can be instantiated.
-      this.buildHeaderDom(this.domNode);
+    this._inDom = true;
 
-      this.header.getBody({ downloadBodyReps: true }, function(body) {
-        this.body = body;
-
-        // always attach the change listener.
-        body.onchange = this.handleBodyChange;
-
-        // if the body reps are downloaded show the message immediately.
-        if (body.bodyRepsDownloaded) {
-          this.buildBodyDom();
-        }
-
-        // XXX trigger spinner
-        //
-      }.bind(this));
-    }.bind(this));
+    // If have a message that is waiting for the DOM, finish
+    // out the display work.
+    if (this._afterInDomMessage) {
+      this.onCurrentMessage(this._afterInDomMessage);
+      this._afterInDomMessage = null;
+    }
   },
 
   told: function(args) {
@@ -208,11 +196,39 @@ MessageReaderCard.prototype = {
    *     email we're currently reading.
    */
   onCurrentMessage: function(currentMessage) {
+    // If the card is not in the DOM yet, do not proceed, as
+    // the iframe work needs to happen once DOM is available.
+    if (!this._inDom) {
+      this._afterInDomMessage = currentMessage;
+      return;
+    }
+
     // Set our current message.
     this.messageSuid = null;
     this._setHeader(currentMessage.header);
     this.clearDom();
-    this.postInsert();
+
+    // Display the header and fetch the body for display.
+    this.latestOnce('header', function() {
+      // iframes need to be linked into the DOM tree before their
+      // contentDocument can be instantiated.
+      this.buildHeaderDom(this.domNode);
+
+      this.header.getBody({ downloadBodyReps: true }, function(body) {
+        this.body = body;
+
+        // always attach the change listener.
+        body.onchange = this.handleBodyChange;
+
+        // if the body reps are downloaded show the message immediately.
+        if (body.bodyRepsDownloaded) {
+          this.buildBodyDom();
+        }
+
+        // XXX trigger spinner
+        //
+      }.bind(this));
+    }.bind(this));
 
     // Previous.
     var hasPrevious = currentMessage.siblings.hasPrevious;
@@ -283,11 +299,13 @@ MessageReaderCard.prototype = {
     });
 
     var otherAddresses = (this.header.to || []).concat(this.header.cc || []);
-    if (this.header.replyTo) {
+    if (this.header.replyTo && this.header.replyTo.author) {
       otherAddresses.push(this.header.replyTo.author);
     }
     for (var i = 0; i < otherAddresses.length; i++) {
-      if (myAddresses.indexOf(otherAddresses[i].address) == -1) {
+      var otherAddress = otherAddresses[i];
+      if (otherAddress.address &&
+          myAddresses.indexOf(otherAddress.address) == -1) {
         return true;
       }
     }
@@ -318,11 +336,6 @@ MessageReaderCard.prototype = {
       return false;
     }).bind(this);
     contents.addEventListener('submit', formSubmit);
-
-    if (!this.canForward()) {
-      contents.querySelector('.msg-reply-menu-forward')
-        .classList.add('collapsed');
-    }
 
     if (!this.canReplyAll()) {
       contents.querySelector('.msg-reply-menu-reply-all')
@@ -697,6 +710,9 @@ MessageReaderCard.prototype = {
         return;
       }
 
+      // Make sure it is not hidden from a next/prev action.
+      lineNode.classList.remove('collapsed');
+
       // Because we can avoid having to do multiple selector lookups, we just
       // mutate the template in-place...
       var peepTemplate = msgPeepBubbleNode;
@@ -733,13 +749,11 @@ MessageReaderCard.prototype = {
     }
 
     // Clear header emails.
-    var types = ['from', 'to', 'cc', 'bcc'];
-    types.forEach(function(type) {
-      var lineClass = 'msg-envelope-' + type + '-line';
-      var lineNode = domNode.getElementsByClassName(lineClass)[0];
-      lineNode.classList.add('collapsed');
-      lineNode.innerHTML = '';
-    });
+    Array.slice(domNode.querySelectorAll('.msg-peep-bubble')).forEach(
+      function(node) {
+        node.parentNode.removeChild(node);
+      }
+    );
 
     // Nuke rendered attachments.
     var attachmentsContainer =

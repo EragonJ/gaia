@@ -12,6 +12,7 @@ class TestPrivilegedAppDevicePicturePrompt(GaiaTestCase):
     def setUp(self):
         GaiaTestCase.setUp(self)
         self.apps.set_permission('UI tests - Privileged App', 'device-storage:pictures-read', 'prompt')
+        self.apps.set_permission('UI tests - Privileged App', 'device-storage:pictures-write', 'prompt')
 
     def test_get_pictures_prompt(self):
         uiTestsPrivileged = UiTestsPivileged(self.marionette)

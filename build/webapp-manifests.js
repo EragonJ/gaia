@@ -70,56 +70,6 @@ function checkOrigin(origin) {
   }
 }
 
-function fillCommsAppManifest(webapp, webappTargetDir) {
-  let manifestObject;
-  let gaia = utils.getGaia(config);
-  if (gaia.l10nManager) {
-    manifestObject = gaia.l10nManager.localizeManifest(webapp);
-  } else {
-    let manifestContent = utils.getFileContent(webapp.manifestFile);
-    manifestObject = JSON.parse(manifestContent);
-  }
-
-  let redirects = manifestObject.redirects;
-
-  let indexedRedirects = {};
-  redirects.forEach(function(aRedirect) {
-    indexedRedirects[aRedirect.from] = aRedirect.to;
-  });
-
-  let mappingParameters = {
-    'facebook': 'redirectURI',
-    'live': 'redirectURI',
-    'gmail': 'redirectURI',
-    'facebook_dialogs': 'redirectMsg',
-    'facebook_logout': 'redirectLogout'
-  };
-
-  let content = JSON.parse(utils.getFileContent(utils.getFile(config.GAIA_DIR,
-    'build', 'config', 'communications_services.json')));
-  let custom = utils.getDistributionFileContent('communications_services',
-    content);
-  let commsServices = JSON.parse(custom);
-
-  let newRedirects = [];
-  redirects.forEach(function(aRedirect) {
-    let from = aRedirect.from;
-    let service = commsServices[from.split('_')[0] || from] || commsServices;
-    newRedirects.push({
-      from: service[mappingParameters[from]],
-      to: indexedRedirects[from]
-    });
-  });
-
-  manifestObject.redirects = newRedirects;
-
-  debug(webappTargetDir.path);
-
-  let file = utils.getFile(webappTargetDir.path, 'manifest.webapp');
-  let args = DEBUG ? [manifestObject, undefined, 2] : [manifestObject];
-  utils.writeContent(file, JSON.stringify.apply(JSON, args));
-}
-
 /**
  * Updates hostnames for InterApp Communication APIs
  */
@@ -132,7 +82,9 @@ function manifestInterAppHostnames(webapp, webappTargetDir) {
       .replace(/gaiamobile.org(:[0-9])?/, host);
   }
 
-  let manifest = utils.getJSON(webapp.manifestFile);
+  let manifest = utils.getJSON(
+    utils.getFile(webappTargetDir.path, 'manifest.webapp'));
+
   if (manifest.connections) {
     for (let i in manifest.connections) {
       let connection = manifest.connections[i];
@@ -168,17 +120,6 @@ function fillAppManifest(webapp) {
     utils.writeContent(manifestFile, JSON.stringify.apply(JSON, args));
   } else {
     webapp.manifestFile.copyTo(webappTargetDir, 'manifest.webapp');
-  }
-
-  if (webapp.url.indexOf('communications.gaiamobile.org') !== -1) {
-    fillCommsAppManifest(webapp, webappTargetDir);
-  }
-  else if (webapp.url.indexOf('://keyboard.gaiamobile.org') !== -1) {
-    let kbdConfig = require('keyboard-config');
-    let kbdManifest = utils.getJSON(webapp.manifestFile);
-    kbdManifest = kbdConfig.addEntryPointsToManifest(config, kbdManifest);
-    utils.writeContent(utils.getFile(webappTargetDir.path, 'manifest.webapp'),
-                       JSON.stringify(kbdManifest));
   }
 
   manifestInterAppHostnames(webapp, webappTargetDir);
@@ -381,7 +322,7 @@ function execute(options) {
       return;
     }
 
-    if (webapp.metaData) {
+    if (utils.isExternalApp(webapp)) {
       fillExternalAppManifest(webapp);
     } else {
       fillAppManifest(webapp);
@@ -403,7 +344,27 @@ function execute(options) {
   // stringify json with 2 spaces indentation
   utils.writeContent(manifestFile, JSON.stringify(manifests, null, 2) + '\n');
 
+  var mapping = {};
+  for (var appname in webapps) {
+    mapping[appname] = {};
+    // this property contains manifest information before running app-makefiles.
+    mapping[appname].originalManifest = webapps[appname].manifest;
+    mapping[appname].origin = webapps[appname].webappsJson.origin;
+    mapping[appname].manifestURL = webapps[appname].webappsJson.manifestURL;
+  }
+
+  let stageFolder = utils.getEnv('STAGE_FOLDER');
+  let stageDir;
+  if (stageFolder) {
+    stageDir = utils.getFile(config.GAIA_DIR, stageFolder);
+    utils.ensureFolderExists(stageDir);
+  }
+  let mappingFile = stageDir.clone();
+  mappingFile.append('webapps-mapping.json');
+  utils.writeContent(mappingFile, JSON.stringify(mapping, null, 2));
+
   return webapps;
 }
 
 exports.execute = execute;
+exports.INSTALL_TIME = INSTALL_TIME;

@@ -5,12 +5,6 @@
 suite('controllers/overlay', function() {
   var Controller;
 
-  // Sometimes setup via the
-  // test agent can take a while,
-  // so we need to bump timeout
-  // to prevent test failure.
-  this.timeout(3000);
-
   suiteSetup(function(done) {
     var self = this;
 
@@ -18,7 +12,7 @@ suite('controllers/overlay', function() {
 
     req([
       'controllers/overlay',
-      'activity',
+      'lib/activity',
       'views/overlay'
     ], function(controller, activity, Overlay) {
       Controller = self.modules.controller = controller;
@@ -59,9 +53,9 @@ suite('controllers/overlay', function() {
   });
 
   suite('OverlayController()', function() {
-    test.skip('Should bind to the storage state change event', function() {
+    test('Should bind to the storage state change event', function() {
       this.controller = new Controller(this.app);
-      assert.ok(this.app.camera.state.on.calledWith('change:storage'));
+      assert.ok(this.app.storage.on.calledWith('statechange'));
     });
   });
 

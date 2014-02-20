@@ -90,7 +90,10 @@
       delivery: 'sent',
       deliveryInfo: [{receiver: '052780',
                       deliveryStatus: 'success',
-                      deliveryTimestamp: now}],
+                      deliveryTimestamp: now,
+                      readStatus: 'success',
+                      readTimestamp: now
+                    }],
       subject: 'Test MMS Image message',
       smil: '<smil><body><par><text src="text1"/></par>' +
             '<par><img src="example.jpg"/></par></body></smil>',
@@ -135,7 +138,10 @@
       delivery: 'sent',
       deliveryInfo: [{receiver: '052780',
                       deliveryStatus: 'success',
-                      deliveryTimestamp: now}],
+                      deliveryTimestamp: now,
+                      readStatus: 'pending',
+                      readTimestamp: null
+                    }],
       subject: 'Test MMS Video message',
       smil: '<smil><body><par><text src="text1"/></par>' +
             '<par><video src="example.ogv"/></par></body></smil>',
@@ -179,7 +185,10 @@
       delivery: 'sent',
       deliveryInfo: [{receiver: '052780',
                       deliveryStatus: 'success',
-                      deliveryTimestamp: now}],
+                      deliveryTimestamp: now,
+                      readStatus: 'not-applicable',
+                      readTimestamp: null
+                    }],
       subject: 'Test MMS audio message',
       smil: '<smil><body><par><text src="text1"/></par>' +
             '<par><audio src="example.ogg"/></par></body></smil>',
@@ -394,6 +403,29 @@
         deliveryStatus: 'not-applicable',
         delivery: 'sent',
         timestamp: now
+      },
+      {
+        threadId: 3,
+        sender: null,
+        receiver: '+18001114321',
+        read: true,
+        type: 'mms',
+        deliveryInfo: [{deliveryStatus: 'not-applicable'}],
+        delivery: 'sent',
+        timestamp: now,
+        subject: 'subject only message',
+        attachments: []
+      },
+      {
+        threadId: 3,
+        sender: '+18001114321',
+        read: true,
+        type: 'mms',
+        deliveryInfo: [{deliveryStatus: 'not-applicable'}],
+        delivery: 'received',
+        timestamp: now,
+        subject: '',
+        attachments: []
       },
       {
         threadId: 4,
@@ -982,7 +1014,8 @@
         receivers: params.receivers,
         type: 'mms',
         delivery: 'sending',
-        deliveryInfo: [{receiver: null, deliveryStatus: 'not-applicable'}],
+        deliveryInfo: [{receiver: null, deliveryStatus: 'not-applicable',
+                        readStatus: 'not-applicable'}],
         read: true,
         subject: params.subject,
         smil: params.smil,

@@ -120,21 +120,10 @@ button::-moz-focus-inner {
   border-left: 0.1rem solid transparent;
 }
 
-.keyboard-key:last-child > .visual-wrapper > span {
-  border-right: transparent;
-}
-
-.keyboard-key.highlighted > .visual-wrapper > span {
-  color: #00caf2;
-  background-color: #4a5255;
-  margin: -0.4rem 0 -0.4rem -0.1rem;
-  padding: 0.4rem 0 0 0.1rem;
-}
-
-.keyboard-key.highlighted > .visual-wrapper > span:after {
+.keyboard-key > .visual-wrapper > span:after {
   content: attr(data-label);
   position: absolute;
-  top: -5.4rem;
+  top: -5.8rem;
   left: calc(50% - 2.8rem);
   width: 5.6rem;
   height: 5.6rem;
@@ -143,8 +132,26 @@ button::-moz-focus-inner {
   line-height: 5.6rem;
   border-radius: 50%;
   background-color: #00aacc;
+  opacity: 0;
 }
 
+.keyboard-key.highlighted {
+  background-color: #4a5255;
+}
+
+.keyboard-key:last-child > .visual-wrapper > span {
+  border-right: transparent;
+}
+
+.keyboard-key.highlighted > .visual-wrapper > span {
+  color: #00caf2;
+  background-color: #4a5255;
+}
+
+/* Show the bubble text when the button is highlighted. */
+.keyboard-key.highlighted > .visual-wrapper > span:after {
+  opacity: 1;
+}
 
 .keyboard-key.highlighted.kbr-menu-on > .visual-wrapper > span:after {
   display: none;
@@ -642,4 +649,37 @@ bubble above the key when you tap and hold. */
   background: url('images/icon_dismiss.png') 0.5rem center /2.4rem no-repeat;
   margin: 0;
   padding: 0;
+}
+
+/*
+ * Specific layout rules; When a layoutX.js has specificCssRule set to true
+ * you can use layout name (Example: ar for Arabic) as a class name.
+ * This is useful is cases where characters are outlining their containers.
+ */
+
+/* Arabic */
+.ar .keyboard-key > .visual-wrapper > span{
+  font-size: 1.8rem;
+}
+
+.keyboard-key > .visual-wrapper > span[data-label="ض"],
+.keyboard-key > .visual-wrapper > span[data-label="ش"]{
+  margin-left:-.5rem;
+}
+
+.keyboard-key > .visual-wrapper > span[data-label="س"]{
+  margin-left:-.2rem;
+}
+
+.keyboard-key > .visual-wrapper > span[data-label="ص"]{
+  margin-left:-.1rem;
+}
+
+/* Bangla Probhat */
+.keyboard-key > .visual-wrapper > span[data-label="ো"] {
+  font-size: 1.6rem;
+}
+
+.keyboard-key > .visual-wrapper > span[data-label="া"] {
+  font-size: 1.7rem;
 }

@@ -1,4 +1,7 @@
+'use strict';
 requireApp('clock/test/unit/mocks/mock_shared/js/lazy_loader.js');
+/*jshint sub: true */
+/* global IDBTransaction */
 
 suite('Database Test', function() {
 
@@ -8,7 +11,7 @@ suite('Database Test', function() {
   window.LazyLoader = window.LazyLoader || {};
 
   suiteSetup(function(done) {
-    LazyLoader = MockLazyLoader;
+    window.LazyLoader = window.MockLazyLoader;
     testRequire(['utils', 'database'], function(rUtils, db) {
       Utils = rUtils;
       Database = db.Database;
@@ -21,14 +24,13 @@ suite('Database Test', function() {
     if (typeof ll === 'undefined') {
       delete window.LazyLoader;
     } else {
-      LazyLoader = ll;
+      window.LazyLoader = ll;
     }
   });
 
   suite('Database creation', function() {
 
     this.slow(750);
-    this.timeout(5000);
 
     var db = null;
 
@@ -157,7 +159,6 @@ suite('Database Test', function() {
             // Version 2 changes:
             // All objA.a data even -> odd
             // All objB data -> objC
-            var curreq;
             var db = trans.db;
             var finalizer = Utils.async.namedParallel([
               'aUp', 'bUp'], function(err) {
@@ -260,7 +261,6 @@ suite('Database Test', function() {
             // Version 1 back-changes:
             // All objA.a data odd -> even
             // All objC data -> objB
-            var curreq;
             var db = trans.db;
             var finalizer = Utils.async.namedParallel([
               'aDown', 'bDown'], function(err) {
@@ -416,6 +416,7 @@ suite('Database Test', function() {
     });
 
     var extractValues = function(conn, callback) {
+      /* jshint loopfunc:true */
       var ret = {};
       var gen = Utils.async.generator(function(err) {
         callback(err, ret);
@@ -495,7 +496,7 @@ suite('Database Test', function() {
           assert.deepEqual(Array.prototype.slice.call(conn.objectStoreNames)
             .sort(),
             [db.effectiveVersionName, 'objA', 'objC'].sort());
-          var extract = extractValues(conn, function(err, value) {
+          extractValues(conn, function(err, value) {
             assert.ok(!err);
             assert.deepEqual(value[db.effectiveVersionName].get(0), {
               number: 2
@@ -544,7 +545,7 @@ suite('Database Test', function() {
           assert.deepEqual(Array.prototype.slice.call(conn.objectStoreNames)
             .sort(),
             [db.effectiveVersionName, 'objA', 'objC'].sort());
-          var extract = extractValues(conn, function(err, value) {
+          extractValues(conn, function(err, value) {
             assert.ok(!err);
             assert.deepEqual(value[db.effectiveVersionName].get(0), {
               number: 3
@@ -586,7 +587,7 @@ suite('Database Test', function() {
           assert.deepEqual(Array.prototype.slice.call(conn.objectStoreNames)
             .sort(),
             [db.effectiveVersionName, 'objA', 'objB'].sort());
-          var extract = extractValues(conn, function(err, value) {
+          extractValues(conn, function(err, value) {
             assert.ok(!err);
             assert.deepEqual(value[db.effectiveVersionName].get(0), {
               number: 1
@@ -643,7 +644,7 @@ suite('Database Test', function() {
             assert.deepEqual(Array.prototype.slice.call(conn.objectStoreNames)
               .sort(),
               [db.effectiveVersionName, 'objA', 'objB'].sort());
-            var extract = extractValues(conn, function(err, value) {
+            extractValues(conn, function(err, value) {
               assert.ok(!err);
               assert.deepEqual(value[db.effectiveVersionName].get(0), {
                 number: 1
